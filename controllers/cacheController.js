@@ -2,6 +2,9 @@
 const crypto = require('crypto');
 const CacheData = require('../model/cacheData');
 
+// limit the cache items by changing value of this variable
+const CACHE_LIMIT = 10;
+
 function getAllKeysFromCache(req, res) {
     const query = CacheData.find({}).select('key -_id')
     query.exec((err, data) => {
@@ -23,15 +26,42 @@ function addDataToCache(req, res) {
         } else if (cacheData.length === 0) {
             req.body['expiresOn'] = new Date(new Date().getTime() + 30000);
             const cache = new CacheData(req.body);
-            cache.save()
-                .then( _ => {
-                    res.status(201).send("Data cached successfully");
-                })
-                .catch(err => {
-                    res.status(500).send("Unable to cache data");
-                });
+            CacheData.count({}, (err, count) => {
+                // check if the number of documents are equal to or more than the CACHE_LIMIT
+                // if count is less than the CACHE_LIMIT, add the document
+                if (count < CACHE_LIMIT) {
+                    cache.save()
+                        .then( _ => {
+                            CACHE_LIMIT += 1;
+                            res.status(201).send("Data cached successfully");
+                        })
+                        .catch(err => {
+                            res.status(500).send("Unable to cache data");
+                        });
+                } 
+                /* 
+                    else if count is equal to the CACHE_LIMIT, delete the oldest document based on _createdAt
+                    timestamp and add the new document
+                */
+                else {
+                    CacheData.deleteOne({}, { sort: { 'created_at' : 1 } }, function(err, _) {
+                        if(err) {
+                            res.status(500).send('Error accessing cache');
+                        }
+                        
+                        cache.save()
+                            .then( _ => {
+                                res.status(201).send("Data cached successfully");
+                            })
+                            .catch(err => {
+                                res.status(500).send("Unable to cache data");
+                            });
+                    });
+                }
+            });
+            
         } else {
-            CacheData.update({ key: req.body.key }, { $set : {value: req.body.value }}, (err, _) => {
+            CacheData.updateOne({ key: req.body.key }, { $set : {value: req.body.value }}, (err, _) => {
                 if (err) {
                     res.status(500).send('Error accessing cache');
                 }
@@ -63,7 +93,7 @@ function getDataFromCache(req, res) {
         } else {
             console.log("Cache hit");
             if(new Date().getTime() < cacheData[0].expiresOn) {
-                CacheData.update({ key: req.params.key }, { $set : { expiresOn: new Date(new Date().getTime() + 300000) }}, (err, _) => {
+                CacheData.updateOne({ key: req.params.key }, { $set : { expiresOn: new Date(new Date().getTime() + 300000) }}, (err, _) => {
                     if (err) {
                         res.status(500).send('Error accessing cache');
                     }
@@ -72,7 +102,7 @@ function getDataFromCache(req, res) {
             } else {
                 const value = crypto.randomBytes(10).toString('hex');
                 const expiresOn = new Date(new Date().getTime() + 300000);
-                CacheData.update({ key: req.params.key }, { $set : { value, expiresOn }}, (err,_) => {
+                CacheData.updateOne({ key: req.params.key }, { $set : { value, expiresOn }}, (err,_) => {
                     if (err) {
                         res.status(500).send('Error accessing cache');
                     }
