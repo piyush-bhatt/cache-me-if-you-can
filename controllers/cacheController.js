@@ -6,9 +6,9 @@ function getAllKeysFromCache(req, res) {
     const query = CacheData.find({}).select('key -_id')
     query.exec((err, data) => {
         if (err) {
-            res.status(404).send('Error accessing cache');
+            res.status(500).send('Error accessing cache');
         } else if (data.length === 0) {
-            res.send("No cached data present");
+            res.status(204).send("No cached data present");
         } else {
             const keys = data.map(keyData => keyData['key']);
             res.send(keys);
@@ -19,23 +19,23 @@ function getAllKeysFromCache(req, res) {
 function addDataToCache(req, res) {
     CacheData.find({ key: req.body.key }, (err, cacheData) => {
         if (err) {
-            res.status(404).send('Error accessing cache');
+            res.status(500).send('Error accessing cache');
         } else if (cacheData.length === 0) {
             req.body['expiresOn'] = new Date(new Date().getTime() + 30000);
             const cache = new CacheData(req.body);
             cache.save()
                 .then( _ => {
-                    res.send("Data cached successfully");
+                    res.status(201).send("Data cached successfully");
                 })
                 .catch(err => {
-                    res.status(400).send("Unable to cache data");
+                    res.status(500).send("Unable to cache data");
                 });
         } else {
             CacheData.update({ key: req.body.key }, { $set : {value: req.body.value }}, (err, _) => {
                 if (err) {
-                    res.status(404).send('Error accessing cache');
+                    res.status(500).send('Error accessing cache');
                 }
-                res.send("Cache updated successfully");
+                res.status(201).send("Cache updated successfully");
             });
             
         }
@@ -45,7 +45,7 @@ function addDataToCache(req, res) {
 function getDataFromCache(req, res) {
     CacheData.find({ key: req.params.key }, (err, cacheData) => {
         if (err) {
-            res.status(400).send('Error accessing cache');
+            res.status(500).send('Error accessing cache');
         } else if (cacheData.length === 0) {
             console.log('Cache miss');
             const cache = new CacheData({
@@ -58,14 +58,14 @@ function getDataFromCache(req, res) {
                     res.send(data.value);
                 })
                 .catch(err => {
-                    res.status(400).send("Unable to cache data");
+                    res.status(500).send("Unable to cache data");
                 });
         } else {
             console.log("Cache hit");
             if(new Date().getTime() < cacheData[0].expiresOn) {
                 CacheData.update({ key: req.params.key }, { $set : { expiresOn: new Date(new Date().getTime() + 300000) }}, (err, _) => {
                     if (err) {
-                        res.status(400).send('Error accessing cache');
+                        res.status(500).send('Error accessing cache');
                     }
                     res.send(cacheData[0].value);
                 });
@@ -74,7 +74,7 @@ function getDataFromCache(req, res) {
                 const expiresOn = new Date(new Date().getTime() + 300000);
                 CacheData.update({ key: req.params.key }, { $set : { value, expiresOn }}, (err,_) => {
                     if (err) {
-                        res.status(400).send('Error accessing cache');
+                        res.status(500).send('Error accessing cache');
                     }
                     res.send(value);
                 });                
@@ -86,7 +86,7 @@ function getDataFromCache(req, res) {
 function deleteAllKeysFromCache(req, res) {
     CacheData.remove({}, (err, _) => {
         if(err) {
-            res.send("Error accessing cache");
+            res.status(500).send("Error accessing cache");
         }
         res.send("All keys deleted successfully");
     });
